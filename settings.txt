@@ -1,0 +1,2 @@
+USE "node server.js" in the terminal of server.js before starting the server 
+press F5 to start the server

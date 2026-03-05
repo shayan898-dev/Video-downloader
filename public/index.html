@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MediaFetch | Downloader</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background: #0f172a; color: white; display: flex; justify-content: center; padding-top: 40px; }
+        .card { background: #1e293b; padding: 2rem; border-radius: 1.2rem; width: 95%; max-width: 450px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.5); border: 1px solid #334155; }
+        input { width: 100%; padding: 15px; margin: 15px 0; border-radius: 10px; border: 1px solid #334155; background: #0f172a; color: white; box-sizing: border-box; }
+        button { background: #3b82f6; color: white; border: none; padding: 14px; border-radius: 10px; cursor: pointer; width: 100%; font-weight: bold; transition: 0.2s; }
+        button:hover { background: #2563eb; }
+        .res-btn { background: #10b981; margin-top: 10px; }
+        #result { margin-top: 25px; display: none; }
+        #result img { width: 100%; border-radius: 10px; margin-bottom: 10px; }
+        
+        /* Progress Bar & Speed */
+        .progress-container { width: 100%; background: #0f172a; border-radius: 20px; margin-top: 20px; display: none; overflow: hidden; border: 1px solid #334155; }
+        .progress-bar { width: 0%; height: 12px; background: #3b82f6; transition: width 0.3s; }
+        .info-row { display: flex; justify-content: space-between; margin-top: 8px; font-size: 0.85rem; display: none; }
+        #speed-text { color: #10b981; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>MediaFetch</h1>
+        <input type="text" id="urlInput" placeholder="Paste video link here...">
+        <button id="fetchBtn" onclick="getInfo()">Fetch Video Info</button>
+
+        <div id="result">
+            <img id="thumb" src="" alt="Thumbnail">
+            <h3 id="title"></h3>
+            <div id="downloadOptions"></div>
+        </div>
+
+        <div id="progress-area" class="progress-container">
+            <div id="bar" class="progress-bar"></div>
+        </div>
+        <div id="info-area" class="info-row">
+            <span id="progress-text">Processing...</span>
+            <span id="speed-text">0 KB/s</span>
+        </div>
+    </div>
+
+    <script>
+        async function getInfo() {
+            const url = document.getElementById('urlInput').value;
+            const resDiv = document.getElementById('result');
+            if(!url) return alert("Please paste a link!");
+
+            try {
+                const response = await fetch('/api/info', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ url })
+                });
+                const data = await response.json();
+                
+                document.getElementById('thumb').src = data.thumbnail;
+                document.getElementById('title').innerText = data.title;
+                const opt = document.getElementById('downloadOptions');
+                opt.innerHTML = '';
+                data.formats.forEach(q => {
+                    const btn = document.createElement('button');
+                    btn.className = 'res-btn';
+                    btn.innerText = `Download ${q}p`;
+                    btn.onclick = () => startDownload(url, q);
+                    opt.appendChild(btn);
+                });
+                resDiv.style.display = 'block';
+            } catch (e) { alert("Error fetching video details."); }
+        }
+
+        function startDownload(url, q) {
+            const progArea = document.getElementById('progress-area');
+            const infoArea = document.getElementById('info-area');
+            const bar = document.getElementById('bar');
+            const pText = document.getElementById('progress-text');
+            const sText = document.getElementById('speed-text');
+
+            progArea.style.display = 'block';
+            infoArea.style.display = 'flex';
+            bar.style.width = '0%';
+            pText.innerText = "Connecting...";
+
+            const eventSource = new EventSource(`/api/download?url=${encodeURIComponent(url)}&quality=${q}`);
+
+            eventSource.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                if (data.progress) {
+                    bar.style.width = data.progress + '%';
+                    pText.innerText = `Server: ${data.progress}%`;
+                }
+                if (data.speed) {
+                    sText.innerText = `⚡ ${data.speed}`;
+                }
+                if (data.complete) {
+                    eventSource.close();
+                    pText.innerText = "✅ Sending to IDM...";
+                    window.location.href = `/api/get-file/${data.file}`;
+                }
+            };
+        }
+    </script>
+</body>
+</html>
